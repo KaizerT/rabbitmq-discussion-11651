@@ -17,6 +17,8 @@ using System.Threading;
 using System.Text;
 using System.IO;
 using System.Collections.Generic;
+using RabbitMQ.Client;
+using RabbitMQ.Client.Events;
 
 namespace Rabbit.Test.Application.Controllers
 {
@@ -30,6 +32,7 @@ namespace Rabbit.Test.Application.Controllers
         private static IRabbitMQPersistentConnection _rabbitConnection = null;
         private static int _logFileRolloverCounter = 1;
         IBus _rabbitBus;
+        private static RabbitMQChannelPool _nextCommandChannelPool = null;
         IOptions<NextCommandConfigurationOptions> _ncOptions;
         public DeviceController(IRabbitMQPersistentConnection rabbitMQPersistentConnection, IBus rabbitBus, IOptions<NextCommandConfigurationOptions> nextCommandConfigurationOptions)
         {
@@ -44,6 +47,19 @@ namespace Rabbit.Test.Application.Controllers
             if (string.IsNullOrEmpty(_logPath))
             {
                 _logPath = System.IO.Path.Combine(_curLogPath, $"Log_{DateTime.Now.ToString("MM-dd-yyyy_HH-mm-ss-fff")}.log"); 
+            }
+            if (_nextCommandChannelPool == null)
+            {
+                var poolOptions = new RabbitMQChannelPoolConfiguration
+                {
+                    RabbitConnection = _rabbitConnection,
+                    MaxPoolRetry = _ncOptions.Value.MaxChannelPoolRetry,
+                    MinPoolRetryPauseMS = _ncOptions.Value.MinChannelPoolRetryPauseMS,
+                    MaxPoolRetryPauseMS = _ncOptions.Value.MaxChannelPoolRetryPauseMS,
+                    MaxPoolSize = _ncOptions.Value.MaxChannels,
+                };
+
+                _nextCommandChannelPool = new RabbitMQChannelPool(poolOptions);
             }
         }
 
@@ -65,25 +81,24 @@ namespace Rabbit.Test.Application.Controllers
             string responseBody = "";
             const string ExchangeName = "Apheresis";
             HttpStatusCode httpStatus = HttpStatusCode.OK;
-            //IModel ncChannel = null;
-            IDisposable consumer = null;
+            IModel ncChannel = null;
             try
             {
                 int? nextCommandTimeout = _ncOptions.Value.TimeoutSeconds;
 
-                //ncChannel = _nextCommandChannelPool.GetChannelFromPool("NextCommandLog", fkSourceId);
+                ncChannel = _nextCommandChannelPool.GetChannelFromPool("NextCommandLog", fkSourceId);
 
-                //if (ncChannel == null)
-                //{
-                //    LoggingService.Log(LogLevel.Error, $"Channel pool max has been hit and can no longer create a new channel, current channel count {_nextCommandChannelPool.CurrentChannelCount}");
-                //    httpStatus = HttpStatusCode.InternalServerError;
-                //}
+                if (ncChannel == null)
+                {
+                   LogToFile($"Channel pool max has been hit and can no longer create a new channel, current channel count {_nextCommandChannelPool.CurrentChannelCount}");
+                    httpStatus = HttpStatusCode.InternalServerError;
+                }
 
 
                 string consumerTag = string.Empty;
                 try
                 {
-                    //int consumerCount = -1;
+                    int consumerCount = -1;
                     string queueName = string.Format("{0}.NextCommand.{1}", ExchangeName, fkSourceId.ToUpper());
                     string routingKey = string.Format("Apheresis.3.0.0.0.PutNextCommand.{0}", fkSourceId.ToUpper());
 
@@ -98,54 +113,19 @@ namespace Rabbit.Test.Application.Controllers
                     };
                     Channel<string> responseChannel = Channel.CreateBounded<string>(channelOptions);
 
-                    //ncChannel.QueueDeclare(queueName, true, false, false, null);
-                    //ncChannel.ExchangeDeclare(ExchangeName, ExchangeType.Topic, true, false, null);
-                    //ncChannel.QueueBind(queueName, ExchangeName, routingKey);
-                    //AsyncEventingBasicConsumer consumer = new AsyncEventingBasicConsumer(ncChannel);
-                    //AsyncEventHandler<BasicDeliverEventArgs> nextCommandHandler = async (object sender, BasicDeliverEventArgs msg) =>
-                    //{
-                    //    try
-                    //    {
-                    //        _logger.Log(LogLevel.Info, $"NextCommandLog {fkSourceId}: NextCommand received from rabbitmq");
-                    //        if (msg != null && msg.Body.ToArray() != null)
-                    //        {
-                    //            string msgBody = Encoding.UTF8.GetString(msg.Body.ToArray());
-                    //            _logger.Log(LogLevel.Info, $"NextCommandLog {fkSourceId}: NextCommand body from rabbitmq{Environment.NewLine}{msgBody}");
-                    //        }
-                    //        else
-                    //        {
-                    //            _logger.Log(LogLevel.Info, $"NextCommandLog {fkSourceId}: NextCommand received from rabbitmq is null or has null body");
-                    //        }
-                    //        await responseChannel.Writer.WriteAsync(msg);
-                    //        responseChannel.Writer.TryComplete();
-                    //        await Task.Yield();
-                    //    }
-                    //    catch (Exception ex)
-                    //    {
-                    //        _logger.Log(LogLevel.Error, $"NextCommandLog {fkSourceId}: Exception occurred while consuming next command via rabbitmq {ex}");
-                    //    }
-                    //};
-                    //consumer.Received += nextCommandHandler;
-
-                    //bool autoAck = true;
-                    //consumerTag = ncChannel.BasicConsume(queueName, autoAck, consumer);
-                    //_logger.Log(LogLevel.Info, $"NextCommandLog {fkSourceId}: Current consumer tag {consumerTag}");
-
-
-                    var queue = _rabbitBus.Advanced.QueueDeclare(queueName, true, false, false);
-                    consumer = _rabbitBus.Advanced.Consume(queue, (body, properties, info) => Task.Factory.StartNew(() =>
+                    ncChannel.QueueDeclare(queueName, true, false, false, null);
+                    ncChannel.ExchangeDeclare(ExchangeName, ExchangeType.Topic, true, false, null);
+                    ncChannel.QueueBind(queueName, ExchangeName, routingKey);
+                    EventingBasicConsumer consumer = new EventingBasicConsumer(ncChannel);
+                    EventHandler<BasicDeliverEventArgs> nextCommandHandler = (object sender, BasicDeliverEventArgs msg) =>
                     {
                         try
                         {
                             string msgBody = null;
-                            if (body.ToArray() != null)
+                            if (msg != null && msg.Body.ToArray() != null)
                             {
-                                msgBody = Encoding.UTF8.GetString(body.ToArray());
+                                msgBody = Encoding.UTF8.GetString(msg.Body.ToArray());
                                 LogToFile($"NextCommandLog {fkSourceId}: NextCommand body from rabbitmq{Environment.NewLine}{msgBody}");
-                            }
-                            else
-                            {
-                                LogToFile($"NextCommandLog {fkSourceId}: NextCommand received from rabbitmq is null or has null body");
                             }
                             responseChannel.Writer.TryWrite(msgBody);
                             responseChannel.Writer.TryComplete();
@@ -154,7 +134,12 @@ namespace Rabbit.Test.Application.Controllers
                         {
                             LogToFile($"NextCommandLog {fkSourceId}: Exception occurred while consuming next command via rabbitmq {ex}");
                         }
-                    }));
+                    };
+                    consumer.Received += nextCommandHandler;
+
+                    bool autoAck = true;
+                    consumerTag = ncChannel.BasicConsume(queueName, autoAck, consumer);
+
 
                     string message = null;
                     //combine tokens for nextcommand timeout and request cancellation
@@ -171,22 +156,21 @@ namespace Rabbit.Test.Application.Controllers
                                 if (!string.IsNullOrEmpty(returnValue))
                                 {
                                     isMessageFound = true;
-                                    consumer.Dispose();
-                                    ////dispose consumer
-                                    //consumer.Received -= nextCommandHandler;
-                                    ////attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
-                                    //consumerCount = (int)ncChannel.ConsumerCount(queueName);
-                                    //try
-                                    //{
-                                    //    if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
-                                    //    {
-                                    //        ncChannel.BasicCancelNoWait(consumerTag);
-                                    //    }
-                                    //}
-                                    //catch (Exception ex)
-                                    //{
-                                    //    _logger.Log(LogLevel.Error, $"NextCommandLog {fkSourceId}: ConsumerCount:{consumerCount} ConsumerTag:{consumerTag} Exception encountered while trying to dispose consumer in NextCommand endpoint right after message receipt {ex}");
-                                    //}
+                                    //dispose consumer
+                                    consumer.Received -= nextCommandHandler;
+                                    //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
+                                    consumerCount = (int)ncChannel.ConsumerCount(queueName);
+                                    try
+                                    {
+                                        if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
+                                        {
+                                            ncChannel.BasicCancel(consumerTag);
+                                        }
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        LogToFile($"NextCommandLog {fkSourceId}: ConsumerCount:{consumerCount} ConsumerTag:{consumerTag} Exception encountered while trying to dispose consumer in NextCommand endpoint right after message receipt {ex}");
+                                    }
                                 }
                             }
                             else
@@ -224,30 +208,28 @@ namespace Rabbit.Test.Application.Controllers
                         {
                         }
                     }
-                    consumer.Dispose();
-                    //consumerCount = -1;
-                    ////ensure consumer cancel
-                    ////dispose consumer
-                    //consumer.Received -= nextCommandHandler;
-                    ////attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
-                    //consumerCount = (int)ncChannel.ConsumerCount(queueName);
-                    //try
-                    //{
-                    //    if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
-                    //    {
-                    //        ncChannel.BasicCancelNoWait(consumerTag);
-                    //    }
-                    //}
-                    //catch (Exception ex)
-                    //{
-                    //    _logger.Log(LogLevel.Error, $"NextCommandLog {fkSourceId}: ConsumerCount:{consumerCount} ConsumerTag:{consumerTag} Exception encountered while trying to dispose consumer in NextCommand endpoint at the end of the method {ex}");
-                    //}
+                    consumerCount = -1;
+                    //ensure consumer cancel
+                    //dispose consumer
+                    consumer.Received -= nextCommandHandler;
+                    //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
+                    consumerCount = (int)ncChannel.ConsumerCount(queueName);
+                    try
+                    {
+                        if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
+                        {
+                            ncChannel.BasicCancel(consumerTag);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        LogToFile($"NextCommandLog {fkSourceId}: ConsumerCount:{consumerCount} ConsumerTag:{consumerTag} Exception encountered while trying to dispose consumer in NextCommand endpoint at the end of the method {ex}");
+                    }
                 }
                 catch (Exception ex)
                 {
-                    //ncChannel.BasicCancelNoWait(consumerTag);
+                    ncChannel.BasicCancel(consumerTag);
                     LogToFile($"NextCommandLog {fkSourceId}: Exception encountered while trying to process next command{Environment.NewLine}{ex}");
-                    consumer?.Dispose();
                 }
             }
             catch (Exception e)
@@ -257,7 +239,7 @@ namespace Rabbit.Test.Application.Controllers
             }
             finally
             {
-                //_nextCommandChannelPool.ReturnToPool(ncChannel);
+                _nextCommandChannelPool.ReturnToPool(ncChannel);
             }
 
             if (string.IsNullOrEmpty(responseBody))

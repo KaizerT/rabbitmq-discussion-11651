@@ -8,5 +8,9 @@ namespace Rabbit.Test.Application.Models
     public class NextCommandConfigurationOptions
     {
         public int TimeoutSeconds { get; set; }
+        public int MaxChannels { get; set; }
+        public int MaxChannelPoolRetry { get; set; }
+        public int MinChannelPoolRetryPauseMS { get; set; }
+        public int MaxChannelPoolRetryPauseMS { get; set; }
     }
 }

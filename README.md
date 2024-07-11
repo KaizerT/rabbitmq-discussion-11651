@@ -3,7 +3,7 @@ Environment Specs
 
 - VMWare virtual machine
 - Windows Server 2022 Standard x64
--   ![image](https://github.com/KaizerT/rabbitmq-discussion/assets/37116136/9d666084-93b9-4dbb-92dd-4d89b4d013a6)
+-   ![image](https://github.com/KaizerT/rabbitmq-discussion-11651/assets/37116136/7f311a3c-8ce5-441a-8aa4-1d34a6491641)
 - 32 GB RAM
 - 2.3 Ghz CPU
 - .Net 6.0.6 - Windows Server Hosting, Runtime

@@ -63,13 +63,13 @@ builder.Services.AddSingleton<IRabbitMQPersistentConnection>(pc =>
         return null;
 });
 
-builder.Services.AddSingleton<IBus>(sp =>
-{
-    var section = builder.Configuration.GetSection(nameof(BrokerConnection));
-    var brokerConnection = section.Get<BrokerConnection>();
+//builder.Services.AddSingleton<IBus>(sp =>
+//{
+//    var section = builder.Configuration.GetSection(nameof(BrokerConnection));
+//    var brokerConnection = section.Get<BrokerConnection>();
 
-    return RabbitHutch.CreateBus(brokerConnection.ToString());
-});
+//    return RabbitHutch.CreateBus(brokerConnection.ToString());
+//});
 builder.Services.AddMvc(options =>
 {
     options.Filters.Add(typeof(HttpGlobalExceptionFilter));

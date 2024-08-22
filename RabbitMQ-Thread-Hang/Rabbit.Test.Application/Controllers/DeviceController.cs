@@ -31,13 +31,11 @@ namespace Rabbit.Test.Application.Controllers
         private string _binPath = AppDomain.CurrentDomain.BaseDirectory;
         private static IRabbitMQPersistentConnection _rabbitConnection = null;
         private static int _logFileRolloverCounter = 1;
-        IBus _rabbitBus;
         private static RabbitMQChannelPool _nextCommandChannelPool = null;
         IOptions<NextCommandConfigurationOptions> _ncOptions;
-        public DeviceController(IRabbitMQPersistentConnection rabbitMQPersistentConnection, IBus rabbitBus, IOptions<NextCommandConfigurationOptions> nextCommandConfigurationOptions)
+        public DeviceController(IRabbitMQPersistentConnection rabbitMQPersistentConnection, IOptions<NextCommandConfigurationOptions> nextCommandConfigurationOptions)
         {
             _rabbitConnection = rabbitMQPersistentConnection ?? throw new ArgumentNullException(nameof(rabbitMQPersistentConnection));
-            _rabbitBus = rabbitBus ?? throw new ArgumentNullException(nameof(rabbitBus));
             _ncOptions = nextCommandConfigurationOptions ?? throw new ArgumentNullException(nameof(nextCommandConfigurationOptions));
             if (string.IsNullOrEmpty(_curLogPath))
             {
@@ -46,7 +44,7 @@ namespace Rabbit.Test.Application.Controllers
             }
             if (string.IsNullOrEmpty(_logPath))
             {
-                _logPath = System.IO.Path.Combine(_curLogPath, $"Log_{DateTime.Now.ToString("MM-dd-yyyy_HH-mm-ss-fff")}.log"); 
+                _logPath = System.IO.Path.Combine(_curLogPath, $"Log_{DateTime.Now.ToString("MM-dd-yyyy_HH-mm-ss-fff")}.log");
             }
             if (_nextCommandChannelPool == null)
             {
@@ -81,7 +79,7 @@ namespace Rabbit.Test.Application.Controllers
             string responseBody = "";
             const string ExchangeName = "Apheresis";
             HttpStatusCode httpStatus = HttpStatusCode.OK;
-            IModel ncChannel = null;
+            IChannel ncChannel = null;
             try
             {
                 int? nextCommandTimeout = _ncOptions.Value.TimeoutSeconds;
@@ -90,7 +88,7 @@ namespace Rabbit.Test.Application.Controllers
 
                 if (ncChannel == null)
                 {
-                   LogToFile($"Channel pool max has been hit and can no longer create a new channel, current channel count {_nextCommandChannelPool.CurrentChannelCount}");
+                    LogToFile($"Channel pool max has been hit and can no longer create a new channel, current channel count {_nextCommandChannelPool.CurrentChannelCount}");
                     httpStatus = HttpStatusCode.InternalServerError;
                 }
 
@@ -113,11 +111,11 @@ namespace Rabbit.Test.Application.Controllers
                     };
                     Channel<string> responseChannel = Channel.CreateBounded<string>(channelOptions);
 
-                    ncChannel.QueueDeclare(queueName, true, false, false, null);
-                    ncChannel.ExchangeDeclare(ExchangeName, ExchangeType.Topic, true, false, null);
-                    ncChannel.QueueBind(queueName, ExchangeName, routingKey);
-                    EventingBasicConsumer consumer = new EventingBasicConsumer(ncChannel);
-                    EventHandler<BasicDeliverEventArgs> nextCommandHandler = (object sender, BasicDeliverEventArgs msg) =>
+                    await ncChannel.QueueDeclareAsync(queueName, true, false, false, null);
+                    await ncChannel.ExchangeDeclareAsync(ExchangeName, RabbitMQ.Client.ExchangeType.Topic, true, false, null);
+                    await ncChannel.QueueBindAsync(queueName, ExchangeName, routingKey);
+                    AsyncEventingBasicConsumer consumer = new AsyncEventingBasicConsumer(ncChannel);
+                    AsyncEventHandler<BasicDeliverEventArgs> nextCommandHandler = (object sender, BasicDeliverEventArgs msg) =>
                     {
                         try
                         {
@@ -134,11 +132,12 @@ namespace Rabbit.Test.Application.Controllers
                         {
                             LogToFile($"NextCommandLog {fkSourceId}: Exception occurred while consuming next command via rabbitmq {ex}");
                         }
+                        return Task.CompletedTask;
                     };
                     consumer.Received += nextCommandHandler;
 
                     bool autoAck = true;
-                    consumerTag = ncChannel.BasicConsume(queueName, autoAck, consumer);
+                    consumerTag = await ncChannel.BasicConsumeAsync(queueName, autoAck, consumer);
 
 
                     string message = null;
@@ -159,12 +158,12 @@ namespace Rabbit.Test.Application.Controllers
                                     //dispose consumer
                                     consumer.Received -= nextCommandHandler;
                                     //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
-                                    consumerCount = (int)ncChannel.ConsumerCount(queueName);
+                                    consumerCount = (int)await ncChannel.ConsumerCountAsync(queueName);
                                     try
                                     {
-                                        if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
+                                        if (consumerCount > 0 && !string.IsNullOrEmpty(consumerTag))
                                         {
-                                            ncChannel.BasicCancel(consumerTag);
+                                            await ncChannel.BasicCancelAsync(consumerTag);
                                         }
                                     }
                                     catch (Exception ex)
@@ -213,12 +212,12 @@ namespace Rabbit.Test.Application.Controllers
                     //dispose consumer
                     consumer.Received -= nextCommandHandler;
                     //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
-                    consumerCount = (int)ncChannel.ConsumerCount(queueName);
+                    consumerCount = (int)await ncChannel.ConsumerCountAsync(queueName);
                     try
                     {
-                        if (ncChannel.ConsumerCount(queueName) > 0 && !string.IsNullOrEmpty(consumerTag))
+                        if (consumerCount > 0 && !string.IsNullOrEmpty(consumerTag))
                         {
-                            ncChannel.BasicCancel(consumerTag);
+                            await ncChannel.BasicCancelAsync(consumerTag);
                         }
                     }
                     catch (Exception ex)
@@ -228,7 +227,7 @@ namespace Rabbit.Test.Application.Controllers
                 }
                 catch (Exception ex)
                 {
-                    ncChannel.BasicCancel(consumerTag);
+                    await ncChannel.BasicCancelAsync(consumerTag);
                     LogToFile($"NextCommandLog {fkSourceId}: Exception encountered while trying to process next command{Environment.NewLine}{ex}");
                 }
             }

@@ -14,7 +14,7 @@ namespace Rabbit.Test.Application.Models
     public class RabbitMQChannelPool
     {
         IRabbitMQPersistentConnection _rabbitConnection;
-        private static ConcurrentQueue<IModel> _channelPool = new ConcurrentQueue<IModel>();
+        private static ConcurrentQueue<IChannel> _channelPool = new ConcurrentQueue<IChannel>();
         private readonly int _maxPoolRetry = 5;
         private readonly int _minPoolRetryPauseMS = 100;
         private readonly int _maxPoolRetryPauseMS = 500;
@@ -39,9 +39,9 @@ namespace Rabbit.Test.Application.Models
             _rabbitConnection = config.RabbitConnection;
         }
 
-        private IModel CreateChannel()
+        private IChannel CreateChannel()
         {
-            IModel channel = null;
+            IChannel channel = null;
             if (_channelCounter <= _maxPoolSize)
             {
                 channel = _rabbitConnection.CreateModel();
@@ -49,10 +49,10 @@ namespace Rabbit.Test.Application.Models
             }
             return channel;
         }
-        public IModel GetChannelFromPool(string logPrefix, string clientIdentifier)
+        public IChannel GetChannelFromPool(string logPrefix, string clientIdentifier)
         {
             int retries = 1;
-            IModel channel = null;
+            IChannel channel = null;
             while (retries <= _maxPoolRetry)
             {
                 //get channel from pool or create a new one
@@ -84,7 +84,7 @@ namespace Rabbit.Test.Application.Models
 
             return channel;
         }
-        public void ReturnToPool(IModel channel)
+        public void ReturnToPool(IChannel channel)
         {
             if (channel != null)
             {

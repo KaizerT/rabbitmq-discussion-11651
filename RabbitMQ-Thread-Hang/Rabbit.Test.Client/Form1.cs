@@ -51,6 +51,11 @@ namespace Rabbit.Test.Client
                         dgvClients.Rows.Add(client.SerialNumber, "Started", "");
                     });
                     clients.Add(client);
+
+                    this.Invoke(() =>
+                    {
+                        lblActiveCount.Text = clients.Count.ToString();
+                    });
                     Task.Delay(gen.Next(500, 2500)).Wait();
                 }
 
@@ -125,6 +130,7 @@ namespace Rabbit.Test.Client
                 {
                     dgvClients.Rows.Clear();
                     cmdStart.Enabled = true;
+                    lblActiveCount.Text = "";
                 });
             });
         }

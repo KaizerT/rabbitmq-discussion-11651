@@ -38,14 +38,14 @@ namespace Rabbit.Test.Application.Models
             }
         }
 
-        public IModel CreateModel()
+        public IChannel CreateModel()
         {
             if (!IsConnected)
             {
                 throw new InvalidOperationException("No RabbitMQ connections are available to create IModel/Channel");
             }
 
-            return _connection.CreateModel();
+            return _connection.CreateChannelAsync().Result;
         }
 
         public void Dispose()
@@ -74,7 +74,7 @@ namespace Rabbit.Test.Application.Models
                         _connection.ConnectionShutdown -= OnConnectionShutdown;
                         _connection.CallbackException -= OnCallbackException;
                         _connection.ConnectionBlocked -= OnConnectionBlocked;
-                        _connection.Close(TimeSpan.FromMilliseconds(5000));
+                        _connection.CloseAsync(TimeSpan.FromMilliseconds(5000)).Wait();
                     }
                     _connection.Dispose();
                 }
@@ -113,17 +113,17 @@ namespace Rabbit.Test.Application.Models
                 {
                     if (_connection == null)
                     {
-                        _connection = _connectionFactory.CreateConnection(_connectionName);
+                        _connection = _connectionFactory.CreateConnectionAsync(_connectionName).Result;
                     }
                     else
                     {
-                        if(!_connection.IsOpen) 
+                        if (!_connection.IsOpen)
                         {
                             _connection.ConnectionShutdown -= OnConnectionShutdown;
                             _connection.CallbackException -= OnCallbackException;
                             _connection.ConnectionBlocked -= OnConnectionBlocked;
                             _connection = null;
-                            _connection = _connectionFactory.CreateConnection(_connectionName);
+                            _connection = _connectionFactory.CreateConnectionAsync(_connectionName).Result;
                         }
                     }
                 });

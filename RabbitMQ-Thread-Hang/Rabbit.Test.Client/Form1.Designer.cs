@@ -37,11 +37,13 @@
             label1 = new Label();
             groupBox2 = new GroupBox();
             dgvClients = new DataGridView();
-            groupBox3 = new GroupBox();
-            txtConsole = new TextBox();
             SerialNumber = new DataGridViewTextBoxColumn();
             LastAction = new DataGridViewTextBoxColumn();
             LastCommand = new DataGridViewTextBoxColumn();
+            groupBox3 = new GroupBox();
+            txtConsole = new TextBox();
+            lblActiveCount = new Label();
+            label4 = new Label();
             groupBox1.SuspendLayout();
             groupBox2.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)dgvClients).BeginInit();
@@ -144,6 +146,27 @@
             dgvClients.Size = new Size(999, 160);
             dgvClients.TabIndex = 0;
             // 
+            // SerialNumber
+            // 
+            SerialNumber.HeaderText = "Serial Number";
+            SerialNumber.MinimumWidth = 6;
+            SerialNumber.Name = "SerialNumber";
+            SerialNumber.ReadOnly = true;
+            // 
+            // LastAction
+            // 
+            LastAction.HeaderText = "Last Action";
+            LastAction.MinimumWidth = 6;
+            LastAction.Name = "LastAction";
+            LastAction.ReadOnly = true;
+            // 
+            // LastCommand
+            // 
+            LastCommand.HeaderText = "Last Command";
+            LastCommand.MinimumWidth = 6;
+            LastCommand.Name = "LastCommand";
+            LastCommand.ReadOnly = true;
+            // 
             // groupBox3
             // 
             groupBox3.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
@@ -168,32 +191,30 @@
             txtConsole.Size = new Size(999, 191);
             txtConsole.TabIndex = 0;
             // 
-            // SerialNumber
+            // lblActiveCount
             // 
-            SerialNumber.HeaderText = "Serial Number";
-            SerialNumber.MinimumWidth = 6;
-            SerialNumber.Name = "SerialNumber";
-            SerialNumber.ReadOnly = true;
+            lblActiveCount.AutoSize = true;
+            lblActiveCount.Location = new Point(936, 102);
+            lblActiveCount.Name = "lblActiveCount";
+            lblActiveCount.Size = new Size(0, 17);
+            lblActiveCount.TabIndex = 5;
             // 
-            // LastAction
+            // label4
             // 
-            LastAction.HeaderText = "Last Action";
-            LastAction.MinimumWidth = 6;
-            LastAction.Name = "LastAction";
-            LastAction.ReadOnly = true;
-            // 
-            // LastCommand
-            // 
-            LastCommand.HeaderText = "Last Command";
-            LastCommand.MinimumWidth = 6;
-            LastCommand.Name = "LastCommand";
-            LastCommand.ReadOnly = true;
+            label4.AutoSize = true;
+            label4.Location = new Point(849, 102);
+            label4.Name = "label4";
+            label4.Size = new Size(87, 17);
+            label4.TabIndex = 5;
+            label4.Text = "Active Clients:";
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 17F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(1035, 537);
+            Controls.Add(label4);
+            Controls.Add(lblActiveCount);
             Controls.Add(groupBox3);
             Controls.Add(groupBox2);
             Controls.Add(groupBox1);
@@ -207,6 +228,7 @@
             groupBox3.ResumeLayout(false);
             groupBox3.PerformLayout();
             ResumeLayout(false);
+            PerformLayout();
         }
 
         #endregion
@@ -225,5 +247,7 @@
         private DataGridViewTextBoxColumn SerialNumber;
         private DataGridViewTextBoxColumn LastAction;
         private DataGridViewTextBoxColumn LastCommand;
+        private Label lblActiveCount;
+        private Label label4;
     }
 }

@@ -14,7 +14,7 @@ namespace Rabbit.Test.Application.Models.Interfaces
 
         bool TryConnect();
 
-        IModel CreateModel();
+        IChannel CreateModel();
 
     }
 }

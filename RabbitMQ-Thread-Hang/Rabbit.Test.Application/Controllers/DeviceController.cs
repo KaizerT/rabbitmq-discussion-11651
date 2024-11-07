@@ -134,7 +134,7 @@ namespace Rabbit.Test.Application.Controllers
                         }
                         return Task.CompletedTask;
                     };
-                    consumer.Received += nextCommandHandler;
+                    consumer.ReceivedAsync += nextCommandHandler;
 
                     bool autoAck = true;
                     consumerTag = await ncChannel.BasicConsumeAsync(queueName, autoAck, consumer);
@@ -156,7 +156,7 @@ namespace Rabbit.Test.Application.Controllers
                                 {
                                     isMessageFound = true;
                                     //dispose consumer
-                                    consumer.Received -= nextCommandHandler;
+                                    consumer.ReceivedAsync -= nextCommandHandler;
                                     //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
                                     consumerCount = (int)await ncChannel.ConsumerCountAsync(queueName);
                                     try
@@ -210,7 +210,7 @@ namespace Rabbit.Test.Application.Controllers
                     consumerCount = -1;
                     //ensure consumer cancel
                     //dispose consumer
-                    consumer.Received -= nextCommandHandler;
+                    consumer.ReceivedAsync -= nextCommandHandler;
                     //attempt to kill consumer. Try catch added to handle edge cases where the consumer has already been terminated
                     consumerCount = (int)await ncChannel.ConsumerCountAsync(queueName);
                     try
